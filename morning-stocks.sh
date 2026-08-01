@@ -3,7 +3,7 @@
 DISCORD_USER_ID="637824014168883221"
 JOB_ID="283e4917-8882-45fb-bf72-0d127fa90044"
 
-SCHEDULE="0 8 * * *"
+SCHEDULE="10 8 * * *"
 TIMEZONE="America/Edmonton"
 
 PROMPT="Give me this morning's tech stock briefing focused on semiconductors and AI. \
