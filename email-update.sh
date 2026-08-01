@@ -6,12 +6,16 @@ EMAIL_JOB_ID="eb4da821-e6c8-4e93-93ff-07f20ae7d5c5"
 SCHEDULE="0 8 * * *"
 TIMEZONE="America/Los_Angeles"
 
-PROMPT="Check my email inboxes: personal (zechariahwang@gmail.com) and school (z2789wan@uwaterloo.ca). \
-Summarize anything new since the last check: who it is from, what it is about, and \
-whether it needs a reply or action. Lead with anything urgent or time-sensitive \
-(deadlines, professors, appointments). Skip promotions and newsletters unless \
-genuinely important. Keep it short and simple to read, no emojis. If you cannot \
-access an inbox, say so clearly instead of guessing."
+PROMPT="Check my email by running this command: python3 ~/Documents/open-claw-config/gmail.py list 30 \
+This reads my Gmail inbox, which also receives mail forwarded from my school account \
+(z2789wan@uwaterloo.ca), so anything from uwaterloo.ca is school mail. To read the full \
+body of a specific message, run: python3 ~/Documents/open-claw-config/gmail.py read <uid> \
+(use the [uid] shown in brackets). Focus on messages from roughly the last 24 hours. \
+Summarize what is new: who it is from, what it is about, and whether it needs a reply or \
+action. Lead with anything urgent or time-sensitive (deadlines, professors, appointments, \
+anything from uwaterloo.ca). Skip promotions and newsletters unless genuinely important. \
+Keep it short and simple to read, no emojis, no em dashes. If the command errors or you \
+cannot access the inbox, say so clearly instead of guessing."
 
 if [ -z "$EMAIL_JOB_ID" ]; then
   echo "Creating the email-update cron job..."
