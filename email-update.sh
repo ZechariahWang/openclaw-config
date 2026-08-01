@@ -4,7 +4,7 @@ DISCORD_USER_ID="637824014168883221"
 EMAIL_JOB_ID="eb4da821-e6c8-4e93-93ff-07f20ae7d5c5"
 
 SCHEDULE="0 8 * * *"
-TIMEZONE="America/Los_Angeles"
+TIMEZONE="America/Edmonton"
 
 PROMPT="Check my email by running this command: python3 ~/Documents/open-claw-config/gmail.py list 30 \
 This reads my Gmail inbox, which also receives mail forwarded from my school account \
