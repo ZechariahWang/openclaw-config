@@ -11,7 +11,8 @@ Search the web for the latest news and premarket/overnight moves on NVDA, AMD, T
 AVGO, INTC, MU, ARM, plus AI-heavy megacaps (MSFT, GOOGL, META). Include: notable \
 price moves and why, key headlines, earnings or analyst actions, and anything \
 upcoming today. Keep it concise enough for a single Discord message. No emojis, no emdashes, make it extremely short and simple to read \
-give reccomended future steps, but DONT use it as financial advice"
+give reccomended future steps, but DONT use it as financial advice \
+if related tech stocks earnings reports are closing, update me so i can be on the lookout."
 
 if [ -z "$DISCORD_USER_ID" ]; then
   echo "smt went wrong, enter user id"

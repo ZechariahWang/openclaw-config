@@ -1,1 +1,1 @@
-# openclaw-config
+# Iris Config
