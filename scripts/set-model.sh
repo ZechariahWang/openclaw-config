@@ -1,3 +1,4 @@
+#!/usr/bin/env bash
 
 DISCORD_USER_ID="637824014168883221"
 
