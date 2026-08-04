@@ -8,6 +8,7 @@ const DISCORD_TARGET = 'user:637824014168883221';
 const OPENCLAW_BIN = process.env.OPENCLAW_BIN || 'openclaw';
 const SPEAK_TIMEOUT_MS = 90_000;      // max wait for a quick "speak" lookup
 const DM_TIMEOUT_MS = 10 * 60_000;    // max wait for a long "dm" task
+const RECONNECT_DELAY_MS = 1_000;
 
 if (!API_KEY) {
   console.error('Set GEMINI_API_KEY first (free key: https://aistudio.google.com).');
@@ -98,13 +99,19 @@ function delegate(task, mode) {
 // Track running tasks so repeated requests don't spawn duplicates
 const inFlight = new Set();
 
-function handleDelegation(session, call) {
+function handleDelegation(getSession, call) {
   const { task, mode } = call.args;
   const key = task.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 
-  const respond = (response) => session.sendToolResponse({
-    functionResponses: [{ id: call.id, name: call.name, response, scheduling: 'INTERRUPT' }],
-  });
+  // Always answer through the CURRENT session: the connection may have been
+  // resumed/replaced while a long task was running.
+  const respond = (response) => {
+    const s = getSession();
+    if (!s) { console.log('(no session to deliver tool result to)'); return; }
+    s.sendToolResponse({
+      functionResponses: [{ id: call.id, name: call.name, response, scheduling: 'INTERRUPT' }],
+    });
+  };
 
   if (inFlight.has(key)) {
     console.log(`[openclaw:${mode}] duplicate ignored: ${task}`);
@@ -120,15 +127,19 @@ function handleDelegation(session, call) {
     .finally(() => inFlight.delete(key));
 }
 
-// Audio in/out (ALSA via arecord/aplay) 
+// Audio in/out (ALSA via arecord/aplay)
 
-function startMic(session, speaker) {
+function startMic(getSession, speaker) {
   const mic = spawn('arecord', ['-f', 'S16_LE', '-r', '16000', '-c', '1', '-t', 'raw', '-q']);
   mic.stdout.on('data', (chunk) => {
     if (!process.env.MIC_ALWAYS_ON && speaker.isPlaying()) return;
-    session.sendRealtimeInput({
-      audio: { data: chunk.toString('base64'), mimeType: 'audio/pcm;rate=16000' },
-    });
+    const s = getSession();
+    if (!s) return; // between reconnects: drop audio instead of crashing
+    try {
+      s.sendRealtimeInput({
+        audio: { data: chunk.toString('base64'), mimeType: 'audio/pcm;rate=16000' },
+      });
+    } catch { /* connection mid-teardown; next chunk goes to the new session */ }
   });
   mic.on('error', (e) => console.error('mic error:', e.message));
   return mic;
@@ -162,12 +173,15 @@ class Speaker {
   }
 }
 
-// Main 
-async function main() {
-  const ai = new GoogleGenAI({ apiKey: API_KEY });
-  const speaker = new Speaker();
-  let mic = null;
+// Main: persistent session with resumption + auto-reconnect.
+// Gemini caps a single connection at ~10 min; we store the resumption handle it
+// sends us and reconnect with it, so the conversation continues seamlessly.
 
+let currentSession = null;
+let resumeHandle = null;
+let shuttingDown = false;
+
+async function connectSession(ai, speaker) {
   const session = await ai.live.connect({
     model: MODEL,
     config: {
@@ -179,12 +193,25 @@ async function main() {
           prebuiltVoiceConfig: { voiceName: process.env.GEMINI_VOICE || 'Kore' },
         },
       },
+      // Persistent-session machinery:
+      sessionResumption: resumeHandle ? { handle: resumeHandle } : {},
+      contextWindowCompression: { slidingWindow: {} }, // lifts the 15-min session cap
     },
     callbacks: {
       onopen: () => {
-        console.log(`Connected to ${MODEL}. Speak whenever you like; Ctrl+C to quit.`);
+        console.log(resumeHandle
+          ? 'Reconnected; conversation resumed.'
+          : `Connected to ${MODEL}. Speak whenever you like; Ctrl+C to quit.`);
       },
-      onmessage: async (msg) => {
+      onmessage: (msg) => {
+        // Store the latest resumption handle so a reconnect continues this conversation
+        if (msg.sessionResumptionUpdate?.resumable && msg.sessionResumptionUpdate.newHandle) {
+          resumeHandle = msg.sessionResumptionUpdate.newHandle;
+        }
+        if (msg.goAway) {
+          console.log(`(server closing connection in ${msg.goAway.timeLeft || 'a moment'}; will auto-resume)`);
+        }
+
         if (msg.serverContent?.interrupted) speaker.flush();
 
         for (const part of msg.serverContent?.modelTurn?.parts ?? []) {
@@ -193,25 +220,47 @@ async function main() {
 
         for (const call of msg.toolCall?.functionCalls ?? []) {
           if (call.name !== 'delegate_to_openclaw') continue;
-          handleDelegation(session, call); // deliberately not awaited: keep audio flowing
+          handleDelegation(() => currentSession, call); // not awaited: keep audio flowing
         }
       },
       onerror: (e) => console.error('connection error:', e.message || e),
-      onclose: (e) => {
-        console.log('Connection closed.', e?.reason || '');
-        if (mic) mic.kill();
-        process.exit(0);
+      onclose: () => {
+        if (shuttingDown) return;
+        currentSession = null;
+        console.log('Connection dropped; resuming...');
+        setTimeout(() => {
+          connectSession(ai, speaker)
+            .then((s) => { currentSession = s; })
+            .catch((e) => {
+              console.error('Resume failed:', e.message || e);
+              // Handle may have expired (e.g. laptop asleep); start a fresh conversation
+              resumeHandle = null;
+              setTimeout(() => {
+                connectSession(ai, speaker)
+                  .then((s) => { currentSession = s; })
+                  .catch((e2) => { console.error('Reconnect failed:', e2.message || e2); process.exit(1); });
+              }, RECONNECT_DELAY_MS);
+            });
+        }, RECONNECT_DELAY_MS);
       },
     },
   });
+  return session;
+}
 
-  mic = startMic(session, speaker);
+async function main() {
+  const ai = new GoogleGenAI({ apiKey: API_KEY });
+  const speaker = new Speaker();
+
+  currentSession = await connectSession(ai, speaker);
+  const mic = startMic(() => currentSession, speaker);
 
   process.on('SIGINT', () => {
     console.log('\nHanging up.');
-    if (mic) mic.kill();
+    shuttingDown = true;
+    mic.kill();
     speaker.flush();
-    session.close();
+    if (currentSession) currentSession.close();
     process.exit(0);
   });
 }
