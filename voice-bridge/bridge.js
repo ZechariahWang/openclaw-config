@@ -38,6 +38,10 @@ Choosing mode:
   speak a brief spoken summary of it, and mention the full version is in his
   Discord DMs.
 When unsure, use "dm".
+IMPORTANT: only "dm" mode can deliver anything to Discord. If the task is about
+sending, resending, or delivering something to Zech's DMs or any channel, it
+MUST use "dm" mode - "speak" mode runs have no Discord access, and asking them
+to send a DM silently does nothing.
 
 Task etiquette:
 - ALWAYS say a short spoken acknowledgment BEFORE calling the tool, e.g. "One
