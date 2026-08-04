@@ -1,0 +1,12 @@
+{
+  "name": "voice-bridge",
+  "version": "1.0.0",
+  "description": "Gemini Live voice assistant that delegates tasks to OpenClaw",
+  "main": "bridge.js",
+  "scripts": {
+    "start": "node bridge.js"
+  },
+  "dependencies": {
+    "@google/genai": "latest"
+  }
+}
